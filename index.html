@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Our Earth, Our Choices</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Magra:wght@400;700&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/brand.css">
+  <script type="importmap">
+    { "imports": {
+        "three": "./assets/vendor/three.module.js",
+        "three/addons/controls/OrbitControls.js": "./assets/vendor/OrbitControls.js"
+    } }
+  </script>
+</head>
+<body>
+  <div class="edge-dot edge-dot-start" aria-hidden="true"></div>
+  <div class="edge-dot edge-dot-end" aria-hidden="true"></div>
+  <header class="topbar">
+    <img draggable="false" class="sphere" src="assets/brand/network-sphere.png" alt="" aria-hidden="true">
+    <div class="brand">
+      <div>
+        <h1 data-i18n="title"></h1>
+        <p class="subtitle" data-i18n="subtitle"></p>
+      </div>
+    </div>
+    <div class="logos">
+      <img draggable="false" src="assets/brand/stoon-education-logo.png" alt="Spacetoon Education" class="logo-stoon">
+    </div>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-labelledby="eraLbl">
+        <span id="eraLbl" class="seg-label" data-i18n="eraHint"></span>
+        <button class="seg-btn is-on" data-era="2100" data-i18n="era2100"></button>
+        <button class="seg-btn" data-era="far" data-i18n="eraFar"></button>
+      </div>
+      <button id="langBtn" class="pill-btn" data-i18n="langBtn"></button>
+      <button id="sciBtn" class="pill-btn pill-dark" data-i18n="science"></button>
+    </div>
+  </header>
+
+  <div class="presets">
+    <span data-i18n="presets"></span>
+    <button class="chip" data-preset="iceAge" data-i18n="p_iceAge"></button>
+    <button class="chip" data-preset="y1750" data-i18n="p_y1750"></button>
+    <button class="chip" data-preset="today" data-i18n="p_today"></button>
+    <button class="chip" data-preset="paris" data-i18n="p_paris"></button>
+    <button class="chip" data-preset="high" data-i18n="p_high"></button>
+  </div>
+
+  <main class="stage">
+    <section class="slider-group" id="leftSliders"></section>
+    <section class="globe-wrap">
+      <div id="globe" class="globe" aria-label="3D Earth"></div>
+      <div id="tagLayer" class="tag-layer"></div>
+      <div class="temp-badge" id="tempBadge"></div>
+      <div class="globe-ctrls">
+        <div class="seg seg-sm" role="group">
+          <button class="seg-btn" data-season="0" data-i18n="sept"></button>
+          <button class="seg-btn" data-season="1" data-i18n="march"></button>
+        </div>
+        <button class="tog" id="heatBtn" aria-pressed="false" data-i18n="heatMap"></button>
+        <button class="tog tog-icon" id="labelsBtn" aria-pressed="false">
+          <svg class="ico-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>
+          <svg class="ico-eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/><path d="M3 3l18 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+          <span id="labelsTxt"></span>
+        </button>
+      </div>
+      <div class="heat-legend" id="heatLegend" hidden>
+        <span data-i18n="heatLegend"></span>
+        <div class="hl-bar"></div>
+        <div class="hl-ticks"><span>0</span><span>1</span><span>2</span><span>3</span><span>5</span><span>8</span><span>12</span></div>
+      </div>
+      <p class="mood" id="mood" aria-live="polite"></p>
+      <div class="hs-panel" id="hsPanel" hidden>
+        <button class="pill-btn pill-dark" id="hsBack" data-i18n="back"></button>
+        <h3 id="hsName"></h3>
+        <p id="hsStats"></p>
+        <div class="hs-try">
+          <label for="hsTry"><span data-i18n="hsTry"></span> <b id="hsTryVal"></b></label>
+          <input type="range" id="hsTry" min="0" max="100" step="0.5">
+          <button class="chip" id="hsReset" data-i18n="hsReset"></button>
+        </div>
+        <p class="hs-key"><i></i><span data-i18n="hsKey"></span></p>
+        <p class="hs-note" data-i18n="hsNote"></p>
+      </div>
+      <div class="legend">
+        <span><i class="lg lg-fire"></i><span data-i18n="legendFire"></span></span>
+        <span><i class="lg lg-coral"></i><span data-i18n="legendCoral"></span></span>
+        <span><i class="lg lg-storm"></i><span data-i18n="legendStorm"></span></span>
+        <span><i class="lg lg-coast"></i><span data-i18n="legendCoast"></span></span>
+        <span class="sea-note" id="seaNote"></span>
+      </div>
+      <div class="zoom-ctrls" role="group" aria-label="Zoom">
+        <button class="zoom-btn" id="zoomIn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M15 15l6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M7 10h6M10 7v6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+        <button class="zoom-btn" id="zoomOut" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M15 15l6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M7 10h6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <p class="drag-hint" data-i18n="dragHint"></p>
+    </section>
+    <section class="slider-group" id="rightSliders"></section>
+  </main>
+
+  <section class="chain-wrap">
+    <img draggable="false" class="doodle doodle-planet" src="assets/brand/doodle-planet.png" alt="" aria-hidden="true">
+    <h2 data-i18n="chainTitle"></h2>
+    <p class="chain-hint" data-i18n="chainHint"></p>
+    <ol class="csteps" id="chain"></ol>
+    <div class="more-wrap">
+      <button type="button" class="pill-btn pill-dark more-btn" id="moreBtn" aria-expanded="false" aria-controls="cards">
+        <span></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </section>
+
+  <section class="cards" id="cards" hidden></section>
+
+  <footer class="site-footer">
+    <img draggable="false" class="doodle doodle-galaxy" src="assets/brand/doodle-galaxy.png" alt="" aria-hidden="true">
+    <img draggable="false" src="assets/brand/stoon-education-logo.png" alt="Spacetoon Education" class="footer-logo">
+    <p><span data-i18n="tagline"></span></p>
+    <small>All Rights Reserved © Spacetoon Group &nbsp;|&nbsp; <a href="https://www.spacetoonedu.com" target="_blank" rel="noopener">www.spacetoonedu.com</a></small>
+  </footer>
+
+  <dialog id="sciDialog">
+    <div class="dlg">
+      <h2 data-i18n="sciTitle"></h2>
+      <p data-i18n="sciIntro"></p>
+      <ul id="sciModel"></ul>
+      <h3 data-i18n="sources"></h3>
+      <ol id="sciSources" class="sources"></ol>
+      <form method="dialog"><button class="pill-btn pill-dark" data-i18n="close"></button></form>
+    </div>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
