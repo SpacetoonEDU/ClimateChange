@@ -48,7 +48,6 @@ h1, h2, h3 { color: var(--navy); font-weight: 700; }
 /* ---------- Page decorations ---------- */
 .edge-dot { position: absolute; width: 120px; height: 120px; border-radius: 50%; background: var(--cyan); z-index: 0; pointer-events: none; }
 .edge-dot-start { top: 640px; left: -84px; }
-.edge-dot-end { top: 1040px; right: -84px; }
 .topbar { position: relative; padding-top: 22px; padding-inline-start: clamp(70px, 9vw, 120px); }
 .sphere { position: absolute; top: -34px; inset-inline-start: -58px; width: 150px; height: auto; pointer-events: none; z-index: 0; }
 .brand { position: relative; z-index: 1; }
@@ -148,7 +147,7 @@ dialog::backdrop { background: rgba(20, 20, 108, .45); }
 }
 .card-temp .big { color: var(--navy) !important; }
 .thermo { width: 150px; }
-.doodle-planet { top: -46px; width: 80px; }
+.doodle-planet { top: 10px; width: 66px; } /* stays inside "What is happening?" so it never covers the slider labels above */
 .chain-wrap { padding-top: 28px; }
 @media (max-width: 520px) { .temp-badge { top: 58px; } }
 .seg-sm .seg-btn { min-height: 48px; }
@@ -284,3 +283,10 @@ input, textarea { -webkit-user-select: auto; user-select: auto; }
   .cs-sub { flex-basis: 100%; }
   .cs-lvl { margin-top: 0; }
 }
+
+/* ---------- Label close-up panel ---------- */
+.tag-panel .pill-btn { align-self: flex-start; font-size: 13px; padding: 3px 12px; }
+.tag-panel .tp-val { margin: 0; font-family: var(--font-head); font-size: 20px; color: var(--navy); unicode-bidi: plaintext; }
+.tag-panel .tp-x { margin: 0; font-size: 14px; line-height: 1.35; }
+.tag-panel .tp-x:empty { display: none; }
+.globe-wrap.tag-mode .mood, .globe-wrap.tag-mode .legend { display: none; }

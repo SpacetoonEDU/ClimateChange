@@ -11,16 +11,22 @@ const state = {
   clean: TODAY.clean,
   transport: TODAY.transport,
   livestock: TODAY.livestock,
-  far: false,
   lang: 'en',
-  season: 0,      // 0 = September, 1 = March
   heatMap: false,
   labels: false,  // labels on the globe start hidden
   more: false,    // cards under "What is happening?" are hidden until "Show more"
 };
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-const co2Now = () => clamp(state.co2Base + co2FromEnergy(state.clean) + co2FromTransport(state.transport), RANGES.co2.min, RANGES.co2.max);
-const ch4Now = () => clamp(state.ch4Base + methaneFromLivestock(state.livestock), RANGES.methane.min, RANGES.methane.max);
+// CO2 and methane, each inside its own range, and together never past the ends of the greenhouse-gas slider
+function gasNow() {
+  const co2 = clamp(state.co2Base + co2FromEnergy(state.clean) + co2FromTransport(state.transport), RANGES.co2.min, RANGES.co2.max);
+  const ch4 = clamp(state.ch4Base + methaneFromLivestock(state.livestock), RANGES.methane.min, RANGES.methane.max);
+  const e = co2e(co2, ch4), g = RANGES.ghg;
+  if (e > g.max || e < g.min) { const s = splitGhg(clamp(e, g.min, g.max), co2, ch4); return { co2: s.co2, ch4: s.methane }; }
+  return { co2, ch4 };
+}
+const co2Now = () => gasNow().co2;
+const ch4Now = () => gasNow().ch4;
 const ghgNow = () => co2e(co2Now(), ch4Now());
 const t = (k) => STRINGS[state.lang][k];
 const fmt = (n, d = 0) => Number(n).toFixed(d);
@@ -84,7 +90,7 @@ function buildSlider(cfg) {
   return el;
 }
 
-function pct(key, v) { const r = RANGES[key]; return ((v - r.min) / (r.max - r.min)) * 100; }
+function pct(key, v) { const r = RANGES[key]; return clamp((v - r.min) / (r.max - r.min), 0, 1) * 100; }
 function getValue(key) { return key === 'ghg' ? ghgNow() : state[key]; }
 function setGhg(target) {
   const s = splitGhg(target, co2Now(), ch4Now());
@@ -98,6 +104,7 @@ function setValue(key, v, quiet) {
   else {
     const before = ghgNow();
     state[key] = v;
+    setGhg(ghgNow()); // if the total hit the top or bottom of its slider, it stays there instead of piling up
     if (Math.abs(ghgNow() - before) > 0.5 && !quiet) flashLinked(key);
   }
   render();
@@ -138,7 +145,7 @@ function renderSliders() {
 // ---------------- Cards, grouped under the 4 consequences ----------------
 const GROUPS = [
   { id: 'temp',    cards: ['temp', 'regional'] },
-  { id: 'ice',     cards: ['sea', 'arctic', 'glaciers', 'iceSheets'] },
+  { id: 'ice',     cards: ['sea', 'arctic', 'iceSheets'] },
   { id: 'weather', cards: ['heat', 'drought', 'fire', 'storms', 'rain'] },
   { id: 'bio',     cards: ['coral', 'ocean', 'species', 'animals', 'ecoTips'] },
 ];
@@ -156,20 +163,16 @@ function buildCards() {
         <span class="group-num">${gi + 1}</span>
         <span class="group-icon">${GROUP_ICONS[g.id]}</span>
         <div><h2></h2><p class="group-intro"></p></div>
-        <b class="lvl group-lvl"></b>
       </header>
       <div class="group-grid">
         ${g.cards.map(id => `<article class="card card-${id}" id="card-${id}"><h3></h3><div class="card-body"></div></article>`).join('')}
       </div>
     </section>`).join('');
 }
-function setGroup(id, level) {
+function setGroup(id) {
   const s = document.getElementById('group-' + id);
   s.querySelector('h2').textContent = t('grp_' + id);
   s.querySelector('.group-intro').textContent = t('grp_' + id + '_intro');
-  const b = s.querySelector('.group-lvl');
-  b.className = 'lvl group-lvl lvl-' + level;
-  b.textContent = t('grpLevels')[level];
 }
 const card = (id) => document.getElementById('card-' + id);
 function setCard(id, title, html) {
@@ -274,19 +277,6 @@ function blobPath(cx, cy, r) {
   return 'M' + pts.map(p => p.map(n => n.toFixed(1)).join(' ')).join(' L') + 'Z';
 }
 
-function mountain(lossPct) {
-  const snow = 1 - lossPct / 100; // fraction of ice remaining
-  const peakY = 30, baseY = 130, snowY = peakY + (baseY - peakY) * 0.6 * snow;
-  const half = (snowY - peakY) * 0.9;
-  return `<svg viewBox="0 0 200 140" class="mountain" aria-hidden="true">
-    <rect width="200" height="140" fill="#eaf4fb"/>
-    <path d="M0 130 L70 ${peakY} L140 130z" fill="#8c8f94" stroke="#0d2b3e" stroke-width="2"/>
-    <path d="M90 130 L150 60 L200 130z" fill="#a3a6ab" stroke="#0d2b3e" stroke-width="2"/>
-    ${snow > 0.02 ? `<path d="M70 ${peakY} L${70 - half} ${snowY} q${half / 2} -8 ${half} 0 q${half / 2} 8 ${half} 0z" fill="#fff" stroke="#0d2b3e" stroke-width="1.5"/>` : ''}
-    ${snow > 0.25 ? `<path d="M150 60 L${150 - half * 0.6} ${60 + half * 0.6} q${half * 0.6} -6 ${half * 1.2} 0z" fill="#fff" stroke="#0d2b3e" stroke-width="1.5"/>` : ''}
-  </svg>`;
-}
-
 function decadeBoxes(x, cls) {
   // 10 boxes = 10 years. Filled boxes = events per 10 years.
   return `<div class="decade ${cls}">${Array.from({ length: 10 }, (_, i) => {
@@ -340,21 +330,20 @@ function animalList(c) {
 
 function renderCards(c) {
   // ---- 1. Rising temperatures ----
-  setGroup('temp', c.T < 1.2 ? 0 : c.T < 1.5 ? 1 : c.T < 2.5 ? 2 : 3);
+  setGroup('temp');
   setCard('temp', t('temp'), `<div class="split">${thermometer(c.T)}<div><div class="big" style="color:${tempColor(c.T)}">${c.T >= 0 ? '+' : ''}${fmt(c.T, 1)} °C</div><p>${t('tempSub')}</p></div></div>`);
   setCard('regional', t('regional'), `<p class="muted">${t('regionalSub')}</p>${regionalBars(c.T)}`);
 
   // ---- 2. Ice melting & sea level rise ----
-  const slr = c.T < 0 ? c.seaLevelIceAge : state.far ? c.seaLevel2000y : c.seaLevel2100;
-  setGroup('ice', slr < 0.3 && c.arcticIce > 4.5 ? 0 : slr < 0.5 && c.arcticIce > 2 ? 1 : (state.far ? slr < 8 : slr < 0.7) ? 2 : 3);
-  const slrTxt = state.far ? `${fmt(slr, slr < 10 ? 1 : 0)} m` : `${fmt(slr * 100)} cm`;
-  setCard('sea', t('seaLevel'), `${coastScene(slr, state.far)}<div class="row"><span class="big">${slr < -0.5 ? '−' + fmt(-slr) + ' m' : '+' + slrTxt}</span><span>${slr < -0.5 ? t('seaSubIce') : state.far ? t('seaSubFar') : t('seaSub2100')}</span></div>`);
+  const slr = c.T < 0 ? c.seaLevelIceAge : c.seaLevel2100;
+  setGroup('ice');
+  const slrTxt = `${fmt(slr * 100)} cm`;
+  setCard('sea', t('seaLevel'), `${coastScene(slr, false)}<div class="row"><span class="big">${slr < -0.5 ? '−' + fmt(-slr) + ' m' : '+' + slrTxt}</span><span>${slr < -0.5 ? t('seaSubIce') : t('seaSub2100')}</span></div>`);
   setCard('arctic', t('arctic'), `<div class="split">${arcticMap(c.arcticIce)}<div><div class="big">${fmt(c.arcticIce, 1)}</div><p>${t('arcticSub')}</p>${c.arcticIce < 1 ? `<p class="alert">${t('iceFree')}</p>` : ''}</div></div>`);
-  setCard('glaciers', t('glaciers'), `${mountain(c.glacierMassLoss)}<div class="row"><span class="big">${fmt(c.glacierMassLoss)}%</span><span>${t('glaciersSub')}</span></div><p class="muted">${fmt(c.glaciersGone)}% ${t('glaciersGone')}</p>`);
   setCard('iceSheets', t('iceSheets'), `<p class="muted">${t('iceSheetsSub')}</p>${tipList(c, ['greenland', 'wais', 'permafrost'])}`);
 
   // ---- 3. Extreme weather events ----
-  setGroup('weather', c.heatX < 3 ? 0 : c.heatX < 4.5 ? 1 : c.heatX < 7 ? 2 : 3);
+  setGroup('weather');
   setCard('heat', t('heat'), `<p>${t('heatSub')}</p>${decadeBoxes(c.heatX, 'hot')}<div class="row"><span class="big">${fmt(c.heatX, 1)}×</span><span>${t('timesIn10')}</span></div>`);
   setCard('drought', t('drought'), `<p>${t('droughtSub')}</p>${decadeBoxes(c.droughtX, 'dry')}<div class="row"><span class="big">${fmt(c.droughtX, 1)}×</span><span>${t('timesIn10')}</span></div>`);
   const fl = Math.min(4, Math.floor(c.fire * 5));
@@ -363,7 +352,7 @@ function renderCards(c) {
   setCard('rain', t('rain'), `<p>${t('rainSub')}</p>${decadeBoxes(c.rainX, 'wet')}<div class="row"><span class="big">${fmt(c.rainX, 1)}×</span><span>${t('timesIn10')}</span></div>`);
 
   // ---- 4. Biodiversity loss ----
-  setGroup('bio', c.coral > 60 ? 0 : c.coral > 20 ? 1 : c.coral > 1 ? 2 : 3);
+  setGroup('bio');
   setCard('coral', t('coral'), `${coralRow(c.coral)}<div class="row"><span class="big">${fmt(c.coral)}%</span><span>${t('coralSub')}</span></div>`);
   setCard('ocean', t('ocean'), `${phBar(c.pH)}<div class="row"><span class="big">pH ${fmt(c.pH, 2)}</span><span>${t('oceanSub')}</span></div><p class="muted">${fmt(Math.max(0, c.acidityUp))}% ${t('moreAcid')}</p>`);
   setCard('species', t('species'), `${speciesGrid(c.species)}<div class="row"><span class="big">${t('upTo')} ${fmt(c.species)}%</span></div><p class="muted">${t('speciesSub')}</p>`);
@@ -387,13 +376,13 @@ const prevLevels = {};
 
 function chainData(c) {
   const T = c.T, cold = T < -0.3;
-  const sea = T < 0 ? c.seaLevelIceAge : state.far ? c.seaLevel2000y : c.seaLevel2100;
+  const sea = T < 0 ? c.seaLevelIceAge : c.seaLevel2100;
   const ghg = ghgNow();
   const seaTxt = sea < -0.5 ? `−${fmt(-sea)} m` : Math.abs(sea) < 2 ? `+${fmt(sea * 100)} cm` : `+${fmt(sea, 1)} m`;
   return {
     ghg: { val: `${fmt(ghg)} ppm`, sub: t('cv_ghg'), lvl: ghg < 320 ? 0 : ghg < 500 ? 1 : ghg < 700 ? 2 : 3 },
     temp: { val: `${T >= 0 ? '+' : '−'}${fmt(Math.abs(T), 1)} °C`, sub: t('cv_temp'), lvl: cold ? 'c' : T < 1.2 ? 0 : T < 1.5 ? 1 : T < 2.5 ? 2 : 3 },
-    ice: { val: seaTxt, sub: cold ? t('cv_iceCold') : t('cv_ice'), lvl: cold ? 'c' : sea < 0.3 && c.arcticIce > 4.5 ? 0 : sea < 0.5 && c.arcticIce > 2 ? 1 : (state.far ? sea < 8 : sea < 0.7) ? 2 : 3 },
+    ice: { val: seaTxt, sub: cold ? t('cv_iceCold') : t('cv_ice'), lvl: cold ? 'c' : sea < 0.3 && c.arcticIce > 4.5 ? 0 : sea < 0.5 && c.arcticIce > 2 ? 1 : sea < 0.7 ? 2 : 3 },
     weather: { val: `${fmt(c.heatX, 1)}×`, sub: t('cv_weather').replace('{s}', fmt(c.stormShare)), lvl: c.heatX < 3 ? 0 : c.heatX < 4.5 ? 1 : c.heatX < 7 ? 2 : 3 },
     bio: { val: `${fmt(c.species)}%`, sub: t('cv_bio'), lvl: c.coral > 60 ? 0 : c.coral > 20 ? 1 : c.coral > 1 ? 2 : 3 },
   };
@@ -411,9 +400,14 @@ function buildChain() {
   ol.querySelectorAll('.cstep').forEach(b => b.addEventListener('click', () => tapStep(b.dataset.step)));
 }
 
+function clearStep() {
+  if (activeStep === 'temp' && heatBefore !== null) { state.heatMap = heatBefore; heatBefore = null; syncToggles(); }
+  activeStep = null;
+}
 function tapStep(id) {
   if (!globe) return;
   if (openHs) closeHotspot();
+  closeTag(false);
   if (activeStep === 'temp' && heatBefore !== null) { state.heatMap = heatBefore; heatBefore = null; }
   if (activeStep === id) { // tap again: back to the whole Earth
     activeStep = null;
@@ -454,7 +448,7 @@ function renderChain(c) {
   document.getElementById('mood').textContent = T < -3 ? t('moodIceAge') : T < -0.3 ? t('moodCold') : t('mood')[idx];
   // note under the legend: the 2100 sea level is exaggerated on the globe; Ice-Age sea level is real
   const note = document.getElementById('seaNote');
-  note.textContent = T < -0.3 ? t('seaNoteIce').replace('{m}', fmt(-c.seaLevelIceAge)) : state.far ? '' : t('seaNote');
+  note.textContent = T < -0.3 ? t('seaNoteIce').replace('{m}', fmt(-c.seaLevelIceAge)) : t('seaNote');
   note.hidden = !note.textContent;
   const badge = document.getElementById('tempBadge');
   badge.textContent = `${T >= 0 ? '+' : ''}${fmt(T, 1)} °C`;
@@ -516,37 +510,31 @@ const km2 = (v) => v >= 10000 ? `${Math.round(v / 1000).toLocaleString('en')}k` 
 
 function renderGlobeTags(c) {
   if (!globe) return;
-  const sea = state.far ? c.seaLevel2000y : c.seaLevel2100;
+  const sea = c.seaLevel2100;
   const tp = (id) => c.tipping.find(x => x.id === id).level;
   const lvlName = (id) => t('tpLevels')[tp(id)];
   const lvlOf = (id) => Math.min(2, tp(id));
-  const ice = state.season ? c.arcticIceMarch : c.arcticIce;
-  const glLoss = state.far ? Math.min(100, c.glacierMassLoss * 1.8) : c.glacierMassLoss;
+  const ice = c.arcticIce;
   const tags = [
-    ['arctic', 82, -20, 'ice', t('arctic'), `${fmt(ice, 1)} ${t('mkm2')}${ice < 1 ? ' · ' + t('iceFree') : ''}`, state.season ? t('marchNote') : t('septNote'), ice < 1 ? 2 : ice < 4.5 ? 1 : 0],
+    ['arctic', 82, -20, 'ice', t('arctic'), `${fmt(ice, 1)} ${t('mkm2')}${ice < 1 ? ' · ' + t('iceFree') : ''}`, t('g_arcticX'), ice < 1 ? 2 : ice < 4.5 ? 1 : 0],
     ['greenland', 73, -41, 'ice', t('g_greenland'), lvlName('greenland'), t('g_greenlandX'), lvlOf('greenland')],
     ['wais', -80, -110, 'ice', t('g_wais'), lvlName('wais'), t('g_waisX'), lvlOf('wais')],
     ['gbr', -15.5, 146, 'reef', t('g_gbr'), `${fmt(c.coral)}% ${t('g_survive')}`, t('g_gbrX'), c.coral > 60 ? 0 : c.coral > 10 ? 1 : 2],
     ['amazon', -4, -63, 'forest', t('g_amazon'), lvlName('amazon'), t('g_amazonX'), lvlOf('amazon')],
-    ['glaciers', 32, 81, 'mountain', t('glaciers'), c.T < -0.3 ? t('g_glacGrow') : `−${fmt(glLoss)}% ${t('g_ice')}`, t('g_glaciersX'), glLoss < 25 ? 0 : glLoss < 35 ? 1 : 2],
     ['med', 40, 17, 'drop', t('g_med'), `${t('drought')} ${fmt(c.droughtX, 1)}×`, t('g_medX'), c.droughtX < 1.8 ? 0 : c.droughtX < 3 ? 1 : 2],
     ['heat', 23, 77, 'sun', t('heat'), `${fmt(c.heatX, 1)}× ${t('g_moreOften')}`, t('g_heatX'), c.heatX < 3 ? 0 : c.heatX < 6 ? 1 : 2],
     ['permafrost', 67, 125, 'ground', t('g_permafrost'), lvlName('permafrost'), t('g_permafrostX'), lvlOf('permafrost')],
     ['storms', 24, 140, 'storm', t('g_storms'), `+${fmt(c.stormShare)}% ${t('g_strongest')}`, `${t('g_stormRain')} +${fmt(c.stormRain)}%`, c.stormShare < 5 ? 0 : c.stormShare < 15 ? 1 : 2],
   ];
-  for (const [id, lat, lon, icon, title, value, extra, level] of tags) {
-    globe.setTag(id, { lat, lon, html: tagHTML(TAG_ICONS[icon], title, value, extra, level), cls: 'info' });
-  }
-  // Spring snow cover (Mudryk et al. 2020: about −8 % per °C vs 1995-2014). Shown in March only.
-  const snowChange = -8 * (c.T - 0.85);
-  globe.setTag('snow', {
-    lat: 58, lon: 95, cls: 'info' + (state.season ? '' : ' off'),
-    html: tagHTML(TAG_ICONS.snow, t('g_snow'), `${snowChange >= 0 ? '+' : '−'}${fmt(Math.abs(snowChange))}%`, t('g_snowX'), snowChange > -4 ? 0 : snowChange > -16 ? 1 : 2),
-  });
-
+  const pin = (id, lat, lon, iconSvg, title, value, extra, level, cls) => {
+    const info = { id, lat, lon, title, value, extra };
+    globe.setTag(id, { lat, lon, html: tagHTML(iconSvg, title, value, extra, level), cls: cls + (openTag === id ? ' open' : ''), onClick: () => focusTag(info) });
+    if (openTag === id) fillTagPanel(info);
+  };
+  for (const [id, lat, lon, icon, title, value, extra, level] of tags) pin(id, lat, lon, TAG_ICONS[icon], title, value, extra, level, 'info');
   for (const [key, [lat, lon]] of Object.entries(ANIMAL_PLACES)) {
     const lv = c.animals[key];
-    globe.setTag('a_' + key, { lat, lon, html: tagHTML(ANIMAL_ICONS[key], t('a_' + key), t('aStatus')[lv], t('a_' + key + 'X'), lv), cls: 'animal' });
+    pin('a_' + key, lat, lon, ANIMAL_ICONS[key], t('a_' + key), t('aStatus')[lv], t('a_' + key + 'X'), lv, 'animal');
   }
   for (const h of HOTSPOTS) {
     const a = floodedArea(h, sea);
@@ -559,12 +547,42 @@ function renderGlobeTags(c) {
   globe.setTagsVisible(state.labels && !globe.hotspot);
 }
 
+// ---------------- Label close-up ----------------
+// Tapping any label flies the globe in to that place and shows what the label means in a panel.
+let openTag = null;
+function fillTagPanel(info) {
+  document.getElementById('tagName').textContent = info.title;
+  document.getElementById('tagVal').textContent = info.value || '';
+  document.getElementById('tagX').textContent = info.extra || '';
+}
+function focusTag(info) {
+  if (openHs) closeHotspot();
+  clearStep();
+  if (openTag === info.id) { closeTag(); return; }
+  openTag = info.id;
+  globe.showView(info.lat, info.lon, 0.5, false);
+  fillTagPanel(info);
+  document.getElementById('tagPanel').hidden = false;
+  document.querySelector('.globe-wrap').classList.add('tag-mode');
+  render();
+}
+function closeTag(goHome = true) {
+  if (!openTag) return;
+  openTag = null;
+  document.getElementById('tagPanel').hidden = true;
+  document.querySelector('.globe-wrap').classList.remove('tag-mode');
+  if (goHome && globe) globe.showView(18, 20, 1, true);
+  render();
+}
+
 // ---------------- Coastal close-up ----------------
 let openHs = null;
 let seaOverride = null; // "what if" sea level in the close-up (m)
 const trySea = (v) => 20 * (v / 100) ** 2; // slider 0-100 -> 0-20 m, finer steps near 0
 const tryPos = (m) => Math.sqrt(Math.min(20, m) / 20) * 100;
 function openHotspot(h) {
+  closeTag(false);
+  clearStep();
   openHs = h;
   globe.openHotspot(h);
   document.getElementById('hsPanel').hidden = false;
@@ -581,7 +599,7 @@ function closeHotspot() {
 }
 function renderHotspot(c) {
   if (!openHs) return;
-  const model = state.far ? c.seaLevel2000y : c.seaLevel2100;
+  const model = c.seaLevel2100;
   const sea = seaOverride != null ? seaOverride : model;
   const a = floodedArea(openHs, sea);
   const seaTxt = sea < 2 ? `+${fmt(sea * 100)} cm` : `+${fmt(sea, 1)} m`;
@@ -591,7 +609,7 @@ function renderHotspot(c) {
   document.getElementById('hsTryVal').textContent = seaTxt;
   document.getElementById('hsReset').hidden = seaOverride == null;
   document.getElementById('hsStats').innerHTML =
-    `<span class="row"><span class="big">${seaTxt}</span><span>${seaOverride != null ? t('hsWhatIf') : state.far ? t('seaSubFar') : t('seaSub2100')}</span></span>` +
+    `<span class="row"><span class="big">${seaTxt}</span><span>${seaOverride != null ? t('hsWhatIf') : t('seaSub2100')}</span></span>` +
     `<span class="row"><span class="big">${Math.round(a).toLocaleString('en')} km²</span><span>${t('hsLand')}</span></span>`;
 }
 
@@ -603,7 +621,7 @@ function render() {
   renderCards(c);
   renderChain(c);
   if (globe) {
-    globe.update(c, { far: state.far, season: state.season, heatMap: state.heatMap });
+    globe.update(c, { far: false, season: 0, heatMap: state.heatMap });
     renderGlobeTags(c);
     renderHotspot(c);
   }
@@ -628,8 +646,6 @@ function applyPreset(name) {
 }
 
 function syncToggles() {
-  document.querySelectorAll('[data-era]').forEach(x => x.classList.toggle('is-on', (x.dataset.era === 'far') === state.far));
-  document.querySelectorAll('[data-season]').forEach(x => x.classList.toggle('is-on', +x.dataset.season === state.season));
   document.getElementById('heatBtn').setAttribute('aria-pressed', state.heatMap);
   const lb = document.getElementById('labelsBtn');
   lb.setAttribute('aria-pressed', state.labels);
@@ -644,6 +660,7 @@ function init() {
   try {
     const saved = JSON.parse(localStorage.getItem('earth-state-v2') || 'null');
     if (saved && 'ch4Base' in saved) Object.assign(state, saved); // ignore saves from the old slider set
+    delete state.far; delete state.season; // removed options
   } catch { /* ignore */ }
 
   const left = document.getElementById('leftSliders'), right = document.getElementById('rightSliders');
@@ -653,13 +670,12 @@ function init() {
   applyLang();
   syncMore();
 
-  document.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => { state.far = b.dataset.era === 'far'; syncToggles(); render(); }));
-  document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('click', () => { state.season = +b.dataset.season; syncToggles(); render(); }));
   document.getElementById('heatBtn').addEventListener('click', () => { state.heatMap = !state.heatMap; syncToggles(); render(); });
   document.getElementById('labelsBtn').addEventListener('click', () => { state.labels = !state.labels; syncToggles(); render(); });
   document.getElementById('zoomIn').addEventListener('click', () => globe && globe.zoomBy(0.75));
   document.getElementById('zoomOut').addEventListener('click', () => globe && globe.zoomBy(1 / 0.75));
   document.getElementById('hsBack').addEventListener('click', closeHotspot);
+  document.getElementById('tagBack').addEventListener('click', () => closeTag());
   document.getElementById('moreBtn').addEventListener('click', () => {
     state.more = !state.more;
     syncMore();

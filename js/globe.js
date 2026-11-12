@@ -461,7 +461,7 @@ export class Globe {
     }
     t.onClick = onClick;
     t.pos = latLonToVec3(lat, lon, R);
-    const c = 'gtag ' + cls + (t.el.classList.contains('open') ? ' open' : '');
+    const c = 'gtag ' + cls + (!onClick && t.el.classList.contains('open') ? ' open' : '');
     if (t.el.className !== c) t.el.className = c;
     if (t.html !== html) { t.el.innerHTML = html; t.html = html; t.w = 0; }
   }
