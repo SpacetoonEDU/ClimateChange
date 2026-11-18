@@ -290,3 +290,8 @@ input, textarea { -webkit-user-select: auto; user-select: auto; }
 .tag-panel .tp-x { margin: 0; font-size: 14px; line-height: 1.35; }
 .tag-panel .tp-x:empty { display: none; }
 .globe-wrap.tag-mode .mood, .globe-wrap.tag-mode .legend { display: none; }
+
+/* ---------- Galaxy doodle in the top-right corner (in place of the logo) ---------- */
+.logo-galaxy { width: 96px; opacity: .85; }
+@media (max-width: 520px) { .logo-galaxy { width: 64px; } }
+body { padding-bottom: 32px; } /* breathing room now that the footer is gone */
